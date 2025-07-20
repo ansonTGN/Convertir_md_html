@@ -1,10 +1,3 @@
-Claro, aquí tienes el archivo `README_EN.md` en inglés, con estilo profesional y contenido equivalente al `README.md` en español:
-
----
-
-## 📄 `README_EN.md`
-
-````markdown
 # 📝 rust_html_gen
 
 A high-quality Markdown-to-HTML converter with support for:
