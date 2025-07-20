@@ -3,8 +3,12 @@ use pyo3::exceptions::{PyIOError, PyValueError};
 use pulldown_cmark::{html, Event, Options, Parser, Tag};
 use serde::Deserialize;
 use std::fs::{self, create_dir_all};
-use std::path::Path;
-use rfd::FileDialog;
+use std::path::{Path, PathBuf};
+
+use std::sync::{Arc, Mutex};
+use notify::{Watcher, RecursiveMode, RecommendedWatcher, Event as NotifyEvent, Config as NotifyConfig};
+use warp::Filter;
+use tokio::runtime::Runtime;
 
 #[derive(Deserialize)]
 struct Config {
@@ -242,43 +246,75 @@ fn ayuda_configuracion() -> PyResult<String> {
 }
 
 #[pyfunction]
-fn seleccionar_archivo_markdown() -> PyResult<Option<String>> {
-    let file = FileDialog::new()
-        .add_filter("Markdown", &["md"])
-        .set_title("Selecciona un archivo Markdown")
-        .pick_file();
+fn vista_previa_html(path_md: String, config_json: String, puerto: Option<u16>) -> PyResult<()> {
+    let markdown_path = PathBuf::from(&path_md);
+    let config_string = config_json.clone();
 
-    Ok(file.map(|f| f.display().to_string()))
-}
+    let markdown_content = fs::read_to_string(&markdown_path)
+        .map_err(|e| PyIOError::new_err(format!("Error leyendo archivo: {}", e)))?;
+    let config: Config = serde_json::from_str(&config_string)
+        .map_err(|e| PyValueError::new_err(format!("Error en config JSON: {}", e)))?;
 
-#[pyfunction]
-fn seleccionar_config_json() -> PyResult<Option<String>> {
-    let file = FileDialog::new()
-        .add_filter("JSON", &["json"])
-        .set_title("Selecciona un archivo de configuración JSON")
-        .pick_file();
+    let port = puerto.unwrap_or(3000);
 
-    Ok(file.map(|f| f.display().to_string()))
-}
+    let html = Arc::new(Mutex::new({
+        let (headings, html_body) = extract_headings_and_generate_html(&markdown_content);
+        let toc_html = if config.include_toc {
+            generate_toc_html(&headings)
+        } else {
+            "".to_string()
+        };
+        build_full_html(&toc_html, &html_body, &config)
+    }));
 
-#[pyfunction]
-fn seleccionar_ruta_salida_html() -> PyResult<Option<String>> {
-    let file = FileDialog::new()
-        .add_filter("HTML", &["html"])
-        .set_title("Selecciona dónde guardar el archivo HTML")
-        .set_file_name("salida.html")
-        .save_file();
+    let html_clone = html.clone();
+    let path_md_clone = markdown_path.clone();
+    let path_md_clone_for_watch = path_md_clone.clone();
 
-    Ok(file.map(|f| f.display().to_string()))
+    std::thread::spawn(move || {
+        let html_inner = html_clone.clone();
+
+        let mut watcher = RecommendedWatcher::new(
+            move |res: Result<NotifyEvent, _>| {
+                if let Ok(_) = res {
+                    if let Ok(md_content) = fs::read_to_string(&path_md_clone) {
+                        if let Ok(cfg) = serde_json::from_str::<Config>(&config_string) {
+                            let (headings, html_body) = extract_headings_and_generate_html(&md_content);
+                            let toc_html = if cfg.include_toc {
+                                generate_toc_html(&headings)
+                            } else {
+                                "".to_string()
+                            };
+                            let updated_html = build_full_html(&toc_html, &html_body, &cfg);
+                            *html_inner.lock().unwrap() = updated_html;
+                            println!("🔄 HTML actualizado en servidor.");
+                        }
+                    }
+                }
+            },
+            NotifyConfig::default()
+        ).expect("No se pudo crear watcher");
+
+        watcher.watch(&path_md_clone_for_watch, RecursiveMode::NonRecursive).unwrap();
+    });
+
+    println!("🌐 Vista previa en http://localhost:{}", port);
+
+    Runtime::new().unwrap().block_on(async move {
+        let html_filter = warp::any().map(move || {
+            warp::reply::html(html.lock().unwrap().clone())
+        });
+        warp::serve(html_filter).run(([127, 0, 0, 1], port)).await;
+    });
+
+    Ok(())
 }
 
 #[pymodule]
 fn rust_html_gen(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generar_html_desde_markdown, m)?)?;
     m.add_function(wrap_pyfunction!(ayuda_configuracion, m)?)?;
-    m.add_function(wrap_pyfunction!(seleccionar_archivo_markdown, m)?)?;
-    m.add_function(wrap_pyfunction!(seleccionar_config_json, m)?)?;
-    m.add_function(wrap_pyfunction!(seleccionar_ruta_salida_html, m)?)?;
+    m.add_function(wrap_pyfunction!(vista_previa_html, m)?)?;
     Ok(())
 }
 
