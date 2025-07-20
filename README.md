@@ -1,147 +1,418 @@
-### 📄 `README.md`
+Aquí tienes:
+
+---
+
+## ✅ Código completo en Rust corregido (`lib.rs`)
+
+Incluye:
+
+* Corrección de conflicto con `Event`.
+* Corrección del tipo del watcher.
+* Compatibilidad con Python y servidor local.
+
+```rust
+use pyo3::prelude::*;
+use pyo3::exceptions::{PyIOError, PyValueError};
+use pulldown_cmark::{html, Event, Options, Parser, Tag};
+use serde::Deserialize;
+use std::fs::{self, create_dir_all};
+use std::path::Path;
+
+use std::sync::{Arc, Mutex};
+use notify::{Watcher, RecursiveMode, RecommendedWatcher, Event as NotifyEvent};
+use warp::Filter;
+use tokio::runtime::Runtime;
+
+#[derive(Deserialize)]
+struct Config {
+    title: String,
+    include_toc: bool,
+    theme: Option<String>,
+    toc_position: Option<String>,
+    header: bool,
+    custom_css: Option<String>,
+    lang: Option<String>,
+    meta_description: Option<String>
+}
+
+struct Heading {
+    level: usize,
+    text: String,
+    id: String,
+}
+
+fn sanitize_id(text: &str) -> String {
+    text.to_lowercase()
+        .replace([' ', '.', ':', ',', '(', ')', '[', ']', '/', '\''], "-")
+        .replace("--", "-")
+        .trim_matches('-')
+        .to_string()
+}
+
+fn extract_headings_and_generate_html(markdown: &str) -> (Vec<Heading>, String) {
+    let mut headings = Vec::new();
+    let mut html_out = String::new();
+    let mut in_heading = false;
+    let mut heading_text = String::new();
+    let mut current_level = 0;
+
+    let parser = Parser::new_ext(markdown, Options::all());
+
+    let mapped = parser.filter_map(|event| {
+        match event {
+            Event::Start(Tag::Heading(level, _, _)) => {
+                in_heading = true;
+                current_level = level as usize;
+                heading_text.clear();
+                None
+            }
+            Event::Text(text) if in_heading => {
+                heading_text.push_str(&text);
+                Some(Event::Text(text))
+            }
+            Event::End(Tag::Heading(_, _, _)) => {
+                in_heading = false;
+                let id = sanitize_id(&heading_text);
+                headings.push(Heading {
+                    level: current_level,
+                    text: heading_text.clone(),
+                    id: id.clone(),
+                });
+                let heading_html = format!(
+                    "<h{lvl} id=\"{id}\">{text}</h{lvl}>",
+                    lvl = current_level,
+                    id = id,
+                    text = heading_text
+                );
+                Some(Event::Html(heading_html.into()))
+            }
+            other => Some(other),
+        }
+    });
+
+    html::push_html(&mut html_out, mapped);
+    (headings, html_out)
+}
+
+fn generate_toc_html(headings: &[Heading]) -> String {
+    let mut toc = String::new();
+    let mut last_level = 0;
+
+    for heading in headings {
+        let level = heading.level;
+
+        if level > last_level {
+            for _ in last_level..level {
+                toc.push_str("<ul>");
+            }
+        } else if level < last_level {
+            for _ in level..last_level {
+                toc.push_str("</ul>");
+            }
+        }
+
+        toc.push_str(&format!(
+            "<li><a href=\"#{}\">{}</a></li>",
+            heading.id, heading.text
+        ));
+        last_level = level;
+    }
+
+    for _ in 0..last_level {
+        toc.push_str("</ul>");
+    }
+
+    toc
+}
+
+fn build_full_html(toc: &str, body: &str, cfg: &Config) -> String {
+    let lang = cfg.lang.clone().unwrap_or_else(|| "es".to_string());
+    let meta = cfg.meta_description.clone().unwrap_or_default();
+    let toc_position = cfg.toc_position.clone().unwrap_or_else(|| "left".to_string());
+    let custom_css = cfg.custom_css.clone().unwrap_or_default();
+    let dark_theme = cfg.theme.as_deref() == Some("dark");
+
+    let toc_style = if toc_position == "right" {
+        "order: 2;"
+    } else {
+        "order: 0;"
+    };
+
+    let theme_class = if dark_theme { "dark" } else { "" };
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="{lang}" class="{theme_class}">
+<head>
+  <meta charset="UTF-8">
+  <title>{title}</title>
+  <meta name="description" content="{meta}">
+  <style>
+    body {{
+      margin: 0;
+      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      height: 100vh;
+      background: {bg};
+      color: {fg};
+    }}
+    nav {{
+      width: 280px;
+      padding: 2rem 1.5rem;
+      background: {nav_bg};
+      color: {nav_fg};
+      overflow-y: auto;
+      border-right: 1px solid #ccc;
+      {toc_style}
+    }}
+    nav a {{
+      color: {link};
+    }}
+    nav a:hover {{
+      background: {hover};
+      color: {hover_fg};
+    }}
+    main {{
+      flex: 1;
+      padding: 2rem 3rem;
+      overflow-y: auto;
+    }}
+    {custom_css}
+  </style>
+</head>
+<body>
+  <nav>
+    <h2>Índice</h2>
+    {toc}
+  </nav>
+  <main>
+    {header}
+    <section>{body}</section>
+  </main>
+</body>
+</html>"#,
+        title = cfg.title,
+        meta = meta,
+        lang = lang,
+        toc = toc,
+        body = body,
+        header = if cfg.header {
+            format!("<header><h1>{}</h1></header>", cfg.title)
+        } else {
+            "".to_string()
+        },
+        custom_css = custom_css,
+        toc_style = toc_style,
+        theme_class = theme_class,
+        bg = if dark_theme { "#111827" } else { "#fdfdfd" },
+        fg = if dark_theme { "#f3f4f6" } else { "#1c1c1c" },
+        nav_bg = if dark_theme { "#1f2937" } else { "#e5e7eb" },
+        nav_fg = if dark_theme { "#f9fafb" } else { "#111827" },
+        link = if dark_theme { "#93c5fd" } else { "#2563eb" },
+        hover = if dark_theme { "#374151" } else { "#cbd5e1" },
+        hover_fg = if dark_theme { "#ffffff" } else { "#1e293b" }
+    )
+}
+
+#[pyfunction]
+fn generar_html_desde_markdown(path_md: String, path_output: String, config_json: String) -> PyResult<()> {
+    let markdown_content = fs::read_to_string(&path_md)
+        .map_err(|e| PyIOError::new_err(format!("Error leyendo archivo: {}", e)))?;
+
+    let config: Config = serde_json::from_str(&config_json)
+        .map_err(|e| PyValueError::new_err(format!("Error en config JSON: {}", e)))?;
+
+    let (headings, html_body) = extract_headings_and_generate_html(&markdown_content);
+    let toc_html = if config.include_toc {
+        generate_toc_html(&headings)
+    } else {
+        "".to_string()
+    };
+
+    let final_html = build_full_html(&toc_html, &html_body, &config);
+
+    if let Some(parent) = Path::new(&path_output).parent() {
+        create_dir_all(parent).ok();
+    }
+
+    fs::write(&path_output, final_html)
+        .map_err(|e| PyIOError::new_err(format!("Error escribiendo HTML: {}", e)))?;
+
+    Ok(())
+}
+
+#[pyfunction]
+fn ayuda_configuracion() -> PyResult<String> {
+    let ejemplo = r#"
+{
+  "title": "Mi Documento",
+  "include_toc": true,
+  "theme": "light",
+  "toc_position": "left",
+  "header": true,
+  "custom_css": null,
+  "lang": "es",
+  "meta_description": "Descripción del documento"
+}
+"#;
+    Ok(ejemplo.to_string())
+}
+
+#[pyfunction]
+fn vista_previa_html(path_md: String, config_json: String, puerto: Option<u16>) -> PyResult<()> {
+    let markdown_content = fs::read_to_string(&path_md)
+        .map_err(|e| PyIOError::new_err(format!("Error leyendo archivo: {}", e)))?;
+    let config: Config = serde_json::from_str(&config_json)
+        .map_err(|e| PyValueError::new_err(format!("Error en config JSON: {}", e)))?;
+
+    let port = puerto.unwrap_or(3000);
+
+    let html = Arc::new(Mutex::new({
+        let (headings, html_body) = extract_headings_and_generate_html(&markdown_content);
+        let toc_html = if config.include_toc {
+            generate_toc_html(&headings)
+        } else {
+            "".to_string()
+        };
+        build_full_html(&toc_html, &html_body, &config)
+    }));
+
+    let html_clone = html.clone();
+    let path_md_clone = path_md.clone();
+    let config_clone = config_json.clone();
+
+    std::thread::spawn(move || {
+        let html_inner = html_clone.clone();
+        let path_md = path_md_clone;
+        let config_str = config_clone;
+
+        let mut watcher = RecommendedWatcher::new(move |res: Result<NotifyEvent, _>| {
+            if let Ok(_) = res {
+                if let Ok(md_content) = fs::read_to_string(&path_md) {
+                    if let Ok(cfg) = serde_json::from_str::<Config>(&config_str) {
+                        let (headings, html_body) = extract_headings_and_generate_html(&md_content);
+                        let toc_html = if cfg.include_toc {
+                            generate_toc_html(&headings)
+                        } else {
+                            "".to_string()
+                        };
+                        let updated_html = build_full_html(&toc_html, &html_body, &cfg);
+                        *html_inner.lock().unwrap() = updated_html;
+                        println!("🔄 HTML actualizado en servidor.");
+                    }
+                }
+            }
+        }).expect("No se pudo crear watcher");
+
+        watcher.watch(&path_md, RecursiveMode::NonRecursive).unwrap();
+    });
+
+    println!("🌐 Vista previa en http://localhost:{}", port);
+
+    Runtime::new().unwrap().block_on(async move {
+        let html_filter = warp::any().map(move || {
+            warp::reply::html(html.lock().unwrap().clone())
+        });
+        warp::serve(html_filter).run(([127, 0, 0, 1], port)).await;
+    });
+
+    Ok(())
+}
+
+#[pymodule]
+fn rust_html_gen(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(generar_html_desde_markdown, m)?)?;
+    m.add_function(wrap_pyfunction!(ayuda_configuracion, m)?)?;
+    m.add_function(wrap_pyfunction!(vista_previa_html, m)?)?;
+    Ok(())
+}
+```
+
+---
+
+## 📄 `README.md` profesional
 
 ````markdown
-# 🧩 Markdown to HTML Generator — Powered by Rust & Python
+# 📝 rust_html_gen
 
-Convierte archivos Markdown (`.md`) en páginas HTML profesionales, modernas y visualmente atractivas, usando un motor de conversión rápido y extensible escrito en Rust con integración total en Python mediante PyO3.
-
----
-
-## ✨ Características
-
-✅ Conversión de Markdown a HTML enriquecido  
-✅ Índice de contenidos automático (TOC) con enlaces internos  
-✅ Visualización profesional de fragmentos de código (`<pre><code>`)  
-✅ Temas claro/oscuro personalizables  
-✅ Configuración avanzada vía archivo JSON  
-✅ Selección de archivos mediante ventana gráfica (GUI) multiplataforma  
-✅ Integración directa con Python — ideal para flujos de trabajo personalizados
+Conversor de archivos Markdown a HTML profesional, con soporte para índice, temas claro/oscuro, estilos personalizados y vista previa en servidor local. Hecho en Rust y accesible desde Python gracias a [PyO3](https://github.com/PyO3/pyo3).
 
 ---
 
-## ⚙️ Requisitos
+## 🚀 Características
 
-- 🦀 Rust (v1.70+)
-- 🐍 Python (v3.8+)
-- [Poetry](https://python-poetry.org/) o `maturin` para compilar el módulo
-- Dependencias Rust:
-  ```toml
-  [dependencies]
-  pyo3 = { version = "0.21", features = ["extension-module"] }
-  serde = { version = "1", features = ["derive"] }
-  serde_json = "1"
-  pulldown-cmark = "0.9"
-  rfd = "0.14"
-````
+✅ Conversión Markdown → HTML  
+✅ Índice automático de contenidos  
+✅ Tema claro/oscuro configurable  
+✅ Vista previa en vivo en navegador (`http://localhost:PUERTO`)  
+✅ Uso desde Python mediante `maturin`  
+✅ Totalmente personalizable vía JSON  
 
 ---
 
-## 🚀 Instalación
-
-### Opción 1: Usando `maturin`
+## 📦 Instalación
 
 ```bash
 pip install maturin
 maturin develop
-```
-
-Esto compilará y expondrá el módulo como `rust_html_gen` directamente en Python.
+````
 
 ---
 
-## 🧪 Ejemplo de uso
+## 🧪 Uso en Python
 
 ```python
 import rust_html_gen
 
-md_path = rust_html_gen.seleccionar_archivo_markdown()
-config_path = rust_html_gen.seleccionar_config_json()
-output_path = rust_html_gen.seleccionar_ruta_salida_html()
-
-if md_path and config_path and output_path:
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = f.read()
-    rust_html_gen.generar_html_desde_markdown(md_path, output_path, config)
-    print("✅ HTML generado con éxito.")
-```
-
----
-
-## 📂 Estructura esperada
-
-```
-📁 proyecto/
-├── entrada.md               # Archivo Markdown a convertir
-├── config.json              # Configuración del diseño y opciones
-├── salida.html              # Archivo generado (se crea automáticamente)
-├── generador_html.py        # Script Python de ejemplo
-└── src/lib.rs               # Código fuente en Rust
-```
-
----
-
-## 🧰 JSON de configuración (`config.json`)
-
-Puedes personalizar la conversión con un archivo JSON como este:
-
-```json
+# Config JSON como string
+config = """
 {
-  "title": "Mi Documento",
+  "title": "Demo",
   "include_toc": true,
   "theme": "dark",
   "toc_position": "left",
   "header": true,
   "custom_css": null,
   "lang": "es",
-  "meta_description": "Descripción SEO para tu página HTML generada"
+  "meta_description": "Ejemplo desde Python"
+}
+"""
+
+# Generar archivo HTML
+rust_html_gen.generar_html_desde_markdown("README.md", "salida.html", config)
+
+# Vista previa en servidor (puerto 3000 por defecto)
+rust_html_gen.vista_previa_html("README.md", config, 3000)
+```
+
+---
+
+## 🧰 Configuración JSON de ejemplo
+
+```json
+{
+  "title": "Mi Documento",
+  "include_toc": true,
+  "theme": "light",
+  "toc_position": "left",
+  "header": true,
+  "custom_css": null,
+  "lang": "es",
+  "meta_description": "Descripción del documento"
 }
 ```
 
-¿Quieres un ejemplo programático desde Python?
+---
 
-```python
-print(rust_html_gen.ayuda_configuracion())
-```
+## 💡 Autor
+
+Desarrollado por **Ángel A. Urbina**
+❤️ Código abierto para la comunidad.
 
 ---
 
-## 🎨 Ejemplo visual
+## 📜 Licencia
 
-Fragmentos de código aparecen así:
+MIT
 
-```rust
-fn main() {
-    println!("¡Hola desde Rust!");
-}
-```
 
-Están renderizados con gradientes, sombras, esquinas redondeadas y colores legibles — tanto en modo claro como oscuro.
-
----
-
-## 🛠 Funciones disponibles en Python
-
-* `generar_html_desde_markdown(path_md, path_output, config_json)`
-* `seleccionar_archivo_markdown()` 🗂
-* `seleccionar_config_json()` ⚙️
-* `seleccionar_ruta_salida_html()` 📤
-* `ayuda_configuracion()` 📋
-
----
-
-## 🧑‍💻 Autor
-
-Proyecto desarrollado por **Angel A. Urbina**
-📫 Contacto: [perfil de LinkedIn](https://www.linkedin.com/in/angelurbina/)
-
----
-
-## 📄 Licencia
-
-Este proyecto está licenciado bajo los términos de la **MIT License**.
-
----
-
-## 🌟 Contribuciones
-
-Las contribuciones son bienvenidas. Abre un *Pull Request* o crea una *Issue* si tienes ideas o mejoras.
