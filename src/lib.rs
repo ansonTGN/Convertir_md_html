@@ -4,13 +4,14 @@ use pulldown_cmark::{html, Event, Options, Parser, Tag};
 use serde::Deserialize;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
+use rfd::FileDialog;
+use std::net::SocketAddr;
+use std::thread;
+use std::time::Duration;
+use std::net::TcpListener;
+use warp;
 
-use std::sync::{Arc, Mutex};
-use notify::{Watcher, RecursiveMode, RecommendedWatcher, Event as NotifyEvent, Config as NotifyConfig};
-use warp::Filter;
-use tokio::runtime::Runtime;
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Config {
     title: String,
     include_toc: bool,
@@ -19,7 +20,7 @@ struct Config {
     header: bool,
     custom_css: Option<String>,
     lang: Option<String>,
-    meta_description: Option<String>
+    meta_description: Option<String>,
 }
 
 struct Heading {
@@ -30,7 +31,7 @@ struct Heading {
 
 fn sanitize_id(text: &str) -> String {
     text.to_lowercase()
-        .replace([' ', '.', ':', ',', '(', ')', '[', ']', '/', '\''], "-")
+        .replace([' ', '.', ':', ',', '(', ')', '[', ']', '/', '\'', '"'], "-")
         .replace("--", "-")
         .trim_matches('-')
         .to_string()
@@ -99,8 +100,9 @@ fn generate_toc_html(headings: &[Heading]) -> String {
         }
 
         toc.push_str(&format!(
-            "<li><a href=\"#{}\">{}</a></li>",
-            heading.id, heading.text
+            "<li><a href=\"#{id}\">{text}</a></li>",
+            id = heading.id,
+            text = heading.text
         ));
         last_level = level;
     }
@@ -154,6 +156,7 @@ fn build_full_html(toc: &str, body: &str, cfg: &Config) -> String {
     }}
     nav a {{
       color: {link};
+      text-decoration: none;
     }}
     nav a:hover {{
       background: {hover};
@@ -203,6 +206,10 @@ fn build_full_html(toc: &str, body: &str, cfg: &Config) -> String {
 
 #[pyfunction]
 fn generar_html_desde_markdown(path_md: String, path_output: String, config_json: String) -> PyResult<()> {
+    if !Path::new(&path_md).exists() {
+        return Err(PyIOError::new_err("Archivo Markdown no existe"));
+    }
+
     let markdown_content = fs::read_to_string(&path_md)
         .map_err(|e| PyIOError::new_err(format!("Error leyendo archivo: {}", e)))?;
 
@@ -229,8 +236,54 @@ fn generar_html_desde_markdown(path_md: String, path_output: String, config_json
 }
 
 #[pyfunction]
+fn generar_html_interactivo() -> PyResult<()> {
+    let archivo_md = FileDialog::new().add_filter("Markdown", &["md"]).pick_file();
+    let config_file = FileDialog::new().add_filter("JSON", &["json"]).pick_file();
+    let salida = FileDialog::new().add_filter("HTML", &["html"]).set_file_name("output.html").save_file();
+
+    if let (Some(md), Some(cfg), Some(out)) = (archivo_md, config_file, salida) {
+        generar_html_desde_markdown(
+            md.to_string_lossy().to_string(),
+            out.to_string_lossy().to_string(),
+            fs::read_to_string(cfg).map_err(|e| PyIOError::new_err(format!("Error leyendo JSON: {}", e)))?
+        )?;
+    }
+
+    Ok(())
+}
+
+#[pyfunction]
+fn ver_html_local(path_html: String, puerto: Option<u16>) -> PyResult<()> {
+    let port = puerto.unwrap_or(3000);
+    let path = PathBuf::from(&path_html);
+
+    let dir = path.parent()
+        .ok_or_else(|| PyValueError::new_err("No se puede determinar el directorio base del archivo"))?
+        .to_path_buf();
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+
+    if TcpListener::bind(addr).is_err() {
+        return Err(PyIOError::new_err(format!("El puerto {} ya está en uso. Usa otro.", port)));
+    }
+
+    // Usar Tokio para ejecutar el futuro de warp
+    thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async move {
+            println!("🌍 Sirviendo HTML desde http://localhost:{port}");
+            let files = warp::fs::dir(dir);
+            warp::serve(files).run(addr).await;
+        });
+    });
+
+    thread::sleep(Duration::from_millis(500));
+    Ok(())
+}
+
+#[pyfunction]
 fn ayuda_configuracion() -> PyResult<String> {
-    let ejemplo = r#"
+    Ok(r#"
 {
   "title": "Mi Documento",
   "include_toc": true,
@@ -241,80 +294,15 @@ fn ayuda_configuracion() -> PyResult<String> {
   "lang": "es",
   "meta_description": "Descripción del documento"
 }
-"#;
-    Ok(ejemplo.to_string())
-}
-
-#[pyfunction]
-fn vista_previa_html(path_md: String, config_json: String, puerto: Option<u16>) -> PyResult<()> {
-    let markdown_path = PathBuf::from(&path_md);
-    let config_string = config_json.clone();
-
-    let markdown_content = fs::read_to_string(&markdown_path)
-        .map_err(|e| PyIOError::new_err(format!("Error leyendo archivo: {}", e)))?;
-    let config: Config = serde_json::from_str(&config_string)
-        .map_err(|e| PyValueError::new_err(format!("Error en config JSON: {}", e)))?;
-
-    let port = puerto.unwrap_or(3000);
-
-    let html = Arc::new(Mutex::new({
-        let (headings, html_body) = extract_headings_and_generate_html(&markdown_content);
-        let toc_html = if config.include_toc {
-            generate_toc_html(&headings)
-        } else {
-            "".to_string()
-        };
-        build_full_html(&toc_html, &html_body, &config)
-    }));
-
-    let html_clone = html.clone();
-    let path_md_clone = markdown_path.clone();
-    let path_md_clone_for_watch = path_md_clone.clone();
-
-    std::thread::spawn(move || {
-        let html_inner = html_clone.clone();
-
-        let mut watcher = RecommendedWatcher::new(
-            move |res: Result<NotifyEvent, _>| {
-                if let Ok(_) = res {
-                    if let Ok(md_content) = fs::read_to_string(&path_md_clone) {
-                        if let Ok(cfg) = serde_json::from_str::<Config>(&config_string) {
-                            let (headings, html_body) = extract_headings_and_generate_html(&md_content);
-                            let toc_html = if cfg.include_toc {
-                                generate_toc_html(&headings)
-                            } else {
-                                "".to_string()
-                            };
-                            let updated_html = build_full_html(&toc_html, &html_body, &cfg);
-                            *html_inner.lock().unwrap() = updated_html;
-                            println!("🔄 HTML actualizado en servidor.");
-                        }
-                    }
-                }
-            },
-            NotifyConfig::default()
-        ).expect("No se pudo crear watcher");
-
-        watcher.watch(&path_md_clone_for_watch, RecursiveMode::NonRecursive).unwrap();
-    });
-
-    println!("🌐 Vista previa en http://localhost:{}", port);
-
-    Runtime::new().unwrap().block_on(async move {
-        let html_filter = warp::any().map(move || {
-            warp::reply::html(html.lock().unwrap().clone())
-        });
-        warp::serve(html_filter).run(([127, 0, 0, 1], port)).await;
-    });
-
-    Ok(())
+"#.to_string())
 }
 
 #[pymodule]
-fn rust_html_gen(_py: Python, m: &PyModule) -> PyResult<()> {
+fn rust_html_gen(m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generar_html_desde_markdown, m)?)?;
+    m.add_function(wrap_pyfunction!(generar_html_interactivo, m)?)?;
+    m.add_function(wrap_pyfunction!(ver_html_local, m)?)?;
     m.add_function(wrap_pyfunction!(ayuda_configuracion, m)?)?;
-    m.add_function(wrap_pyfunction!(vista_previa_html, m)?)?;
     Ok(())
 }
 
