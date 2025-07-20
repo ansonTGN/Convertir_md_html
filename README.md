@@ -1,4 +1,4 @@
-# 🦀 rust_html_gen · Markdown ➜ HTML profesional desde Python
+# 🦀 rust_html_gen · Markdown a HTML Profesional con Rust y Python
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
@@ -7,83 +7,78 @@
 
 ---
 
-## 📌 Descripción (ES)
+## 📌 Descripción
 
-`rust_html_gen` es una biblioteca escrita en **Rust** con bindings para **Python** mediante [PyO3](https://pyo3.rs/), que convierte archivos Markdown (`.md`) en documentos HTML visualmente atractivos y configurables.
-
----
-
-## 📚 Tabla de Contenidos
-
-- [🚀 Características](#-características)
-- [🧪 Ejemplo de uso](#-ejemplo-de-uso)
-- [📦 Instalación](#-instalación)
-- [🧰 Configuración JSON](#-configuración-json)
-- [📁 Estructura del Proyecto](#-estructura-del-proyecto)
-- [🧭 Funciones](#-funciones)
-- [👤 Autor](#-autor)
-- [🇬🇧 English Version](#-english-version)
+`rust_html_gen` es una potente biblioteca, escrita en **Rust**, que utiliza [PyO3](https://pyo3.rs/) para ofrecer *bindings* de alto rendimiento en **Python**. Convierte tus archivos Markdown (`.md`) en documentos HTML visualmente atractivos, personalizables y listos para la web.
 
 ---
 
-## 🚀 Características
+## ✨ Características Principales
 
-- Conversión Markdown → HTML con soporte para encabezados, listas, tablas y más.
-- Índice automático (TOC), con anidamiento correcto.
-- Temas claro/oscuro.
-- CSS personalizado embebido.
-- Vista previa en `localhost`.
-- Modo interactivo con ventanas gráficas de selección de archivos.
-- Fácilmente integrable en scripts Python.
+*   **Conversión Markdown a HTML:** Soporte completo para encabezados, listas, tablas, código y mucho más.
+*   **Índice Automático (TOC):** Genera un índice jerárquico automáticamente para facilitar la navegación.
+*   **Temas:** Elige entre temas claro y oscuro, o personaliza tu propio estilo.
+*   **CSS Personalizado:** Incorpora estilos CSS personalizados para un control total sobre la apariencia.
+*   **Vista Previa Local:** Previsualiza tus documentos HTML en un servidor local con recarga automática.
+*   **Interfaz Interactiva:** Utiliza ventanas gráficas para seleccionar archivos y configurar opciones.
+*   **Integración Sencilla:** Llama a las funciones de `rust_html_gen` directamente desde tus scripts de Python.
 
 ---
 
-## 🧪 Ejemplo de uso
+## ⚙️ Ejemplo de Uso
 
 ```python
 import rust_html_gen
 import json
 
+# Cargar la configuración desde un archivo JSON
 with open("config.json") as f:
     config = json.load(f)
 
+# Generar el archivo HTML desde Markdown
 rust_html_gen.generar_html_desde_markdown(
-    "tests/ejemplo.md",
-    "tests/salida.html",
-    json.dumps(config)
+    "tests/ejemplo.md",  # Archivo Markdown de entrada
+    "tests/salida.html",   # Archivo HTML de salida
+    json.dumps(config)    # Configuración en formato JSON
 )
 
+# Iniciar un servidor local para ver el resultado
 rust_html_gen.ver_html_local("tests/salida.html", 3000)
-````
-
----
-
-## 📦 Instalación
-
-```bash
-maturin develop
-# o para generar el wheel:
-maturin build
 ```
 
 ---
 
-## 🧰 Configuración JSON
+## 🛠️ Instalación
+
+1.  **Requisitos:** Asegúrate de tener Rust y Python instalados.
+2.  **Instalar con Maturin:**
+
+    ```bash
+    maturin develop  # Para desarrollo (se instala en el entorno virtual)
+    # o
+    maturin build    # Para generar un wheel distribuible
+    ```
+
+---
+
+## 🧰 Configuración (JSON)
+
+Personaliza la apariencia y el comportamiento de `rust_html_gen` con un archivo JSON:
 
 ```json
 {
-  "title": "Mi Documento",
+  "title": "Título del Documento",
   "include_toc": true,
   "theme": "light",
   "toc_position": "left",
   "header": true,
-  "custom_css": "...",
+  "custom_css": "/* Aquí tu CSS personalizado */",
   "lang": "es",
-  "meta_description": "Descripción para buscadores"
+  "meta_description": "Descripción para motores de búsqueda"
 }
 ```
 
-Puedes obtener una plantilla directamente:
+Obtén una plantilla de configuración básica directamente desde Python:
 
 ```python
 print(rust_html_gen.ayuda_configuracion())
@@ -91,44 +86,45 @@ print(rust_html_gen.ayuda_configuracion())
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📂 Estructura del Proyecto
 
 ```
 rust_html_gen/
-├── src/
+├── src/            # Código fuente de Rust
 │   └── lib.rs
-├── tests/
+├── tests/          # Archivos de prueba
 │   ├── ejemplo.md
 │   └── config.json
-├── test.py
-├── Cargo.toml
-├── pyproject.toml
-└── README.md
+├── test.py         # Script de prueba en Python
+├── Cargo.toml      # Configuración de Rust
+├── pyproject.toml  # Configuración de Python
+└── README.md       # Este archivo
 ```
 
 ---
 
-## 🧭 Funciones disponibles
+## ⚙️ Funciones Disponibles
 
-| Función                         | Descripción                                  |
-| ------------------------------- | -------------------------------------------- |
-| `generar_html_desde_markdown()` | Convierte `.md` a `.html` con configuración. |
-| `generar_html_interactivo()`    | Modo con ventanas gráficas.                  |
-| `ver_html_local()`              | Servidor en `localhost`.                     |
-| `ayuda_configuracion()`         | Devuelve JSON base de configuración.         |
+| Función                         | Descripción                                                                 |
+| :------------------------------ | :-------------------------------------------------------------------------- |
+| `generar_html_desde_markdown()` | Convierte un archivo Markdown a HTML utilizando la configuración JSON.     |
+| `generar_html_interactivo()`    | Abre una interfaz gráfica para seleccionar archivos y generar el HTML.       |
+| `ver_html_local()`              | Inicia un servidor local para previsualizar el archivo HTML.                |
+| `ayuda_configuracion()`         | Devuelve una cadena JSON con la estructura básica del archivo de configuración. |
 
 ---
 
 ## 👤 Autor
 
-Proyecto desarrollado por **Ángel A. Urbina**
-📫 Contacto: [LinkedIn](https://www.linkedin.com) · [Github](https://github.com)
+Desarrollado por **Ángel A. Urbina**
+
+*   📫 Contacto: [LinkedIn](https://www.linkedin.com) · [GitHub](https://github.com)
 
 ---
 
-# 🇬🇧 English Version
+## 🌐 English Version
 
-## 🦀 rust\_html\_gen · Markdown ➜ Beautiful HTML from Python
+## 🦀 rust\_html\_gen · Markdown to Beautiful HTML with Rust and Python
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
@@ -139,80 +135,76 @@ Proyecto desarrollado por **Ángel A. Urbina**
 
 ## 📌 Description
 
-`rust_html_gen` is a Rust library with Python bindings via [PyO3](https://pyo3.rs/) to transform Markdown (`.md`) into beautifully formatted and configurable HTML documents.
+`rust_html_gen` is a powerful library, written in **Rust**, that uses [PyO3](https://pyo3.rs/) to provide high-performance Python bindings. It converts your Markdown (`.md`) files into visually appealing, customizable, and web-ready HTML documents.
 
 ---
 
-## 📚 Table of Contents
+## ✨ Key Features
 
-* [🚀 Features](#-features)
-* [🧪 Example Usage](#-example-usage)
-* [📦 Installation](#-installation)
-* [🧰 JSON Config](#-json-config)
-* [📁 Project Structure](#-project-structure)
-* [🧭 Functions](#-functions)
-* [👤 Author](#-author)
-
----
-
-## 🚀 Features
-
-* Markdown → HTML conversion with full feature support
-* Auto-generated TOC with nesting
-* Light/Dark theme support
-* Inline or external CSS
-* Local preview via browser
-* Interactive GUI mode
-* Python-friendly
+*   **Markdown to HTML Conversion:** Full support for headings, lists, tables, code, and more.
+*   **Automatic Table of Contents (TOC):** Generates a hierarchical table of contents automatically for easy navigation.
+*   **Themes:** Choose between light and dark themes, or customize your own style.
+*   **Custom CSS:** Incorporate custom CSS styles for total control over appearance.
+*   **Local Preview:** Preview your HTML documents on a local server with automatic reloading.
+*   **Interactive Interface:** Use graphical windows to select files and configure options.
+*   **Easy Integration:** Call `rust_html_gen` functions directly from your Python scripts.
 
 ---
 
-## 🧪 Example Usage
+## ⚙️ Example Usage
 
 ```python
 import rust_html_gen
 import json
 
+# Load configuration from a JSON file
 with open("config.json") as f:
     config = json.load(f)
 
+# Generate the HTML file from Markdown
 rust_html_gen.generar_html_desde_markdown(
-    "tests/ejemplo.md",
-    "tests/salida.html",
-    json.dumps(config)
+    "tests/ejemplo.md",  # Input Markdown file
+    "tests/salida.html",   # Output HTML file
+    json.dumps(config)    # Configuration in JSON format
 )
 
+# Start a local server to view the result
 rust_html_gen.ver_html_local("tests/salida.html", 3000)
 ```
 
 ---
 
-## 📦 Installation
+## 🛠️ Installation
 
-```bash
-maturin develop
-# or
-maturin build
-```
+1.  **Prerequisites:** Make sure you have Rust and Python installed.
+2.  **Install with Maturin:**
+
+    ```bash
+    maturin develop  # For development (installs in the virtual environment)
+    # or
+    maturin build    # To generate a distributable wheel
+    ```
 
 ---
 
-## 🧰 JSON Config
+## 🧰 Configuration (JSON)
+
+Customize the appearance and behavior of `rust_html_gen` with a JSON file:
 
 ```json
 {
-  "title": "My Document",
+  "title": "Document Title",
   "include_toc": true,
   "theme": "light",
   "toc_position": "left",
   "header": true,
-  "custom_css": "...",
+  "custom_css": "/* Your custom CSS here */",
   "lang": "en",
-  "meta_description": "For search engines"
+  "meta_description": "Description for search engines"
 }
 ```
 
-Generate template directly:
+Get a basic configuration template directly from Python:
 
 ```python
 print(rust_html_gen.ayuda_configuracion())
@@ -220,37 +212,36 @@ print(rust_html_gen.ayuda_configuracion())
 
 ---
 
-## 📁 Project Structure
+## 📂 Project Structure
 
 ```
 rust_html_gen/
-├── src/
+├── src/            # Rust source code
 │   └── lib.rs
-├── tests/
+├── tests/          # Test files
 │   ├── ejemplo.md
 │   └── config.json
-├── test.py
-├── Cargo.toml
-├── pyproject.toml
-└── README.md
+├── test.py         # Python test script
+├── Cargo.toml      # Rust configuration
+├── pyproject.toml  # Python configuration
+└── README.md       # This file
 ```
 
 ---
 
-## 🧭 Available Functions
+## ⚙️ Available Functions
 
-| Function                        | Description                            |
-| ------------------------------- | -------------------------------------- |
-| `generar_html_desde_markdown()` | Converts `.md` to `.html` with config. |
-| `generar_html_interactivo()`    | Opens GUI file dialogs.                |
-| `ver_html_local()`              | Launches preview server.               |
-| `ayuda_configuracion()`         | Returns JSON config template.          |
+| Function                        | Description                                                                |
+| :------------------------------ | :------------------------------------------------------------------------- |
+| `generar_html_desde_markdown()` | Converts a Markdown file to HTML using the JSON configuration.            |
+| `generar_html_interactivo()`    | Opens a graphical interface to select files and generate the HTML.          |
+| `ver_html_local()`              | Starts a local server to preview the HTML file.                             |
+| `ayuda_configuracion()`         | Returns a JSON string with the basic structure of the configuration file. |
 
 ---
 
 ## 👤 Author
 
 Developed by **Ángel A. Urbina**
-📫 Contact: [LinkedIn](https://www.linkedin.com/in/angelurbina/)
 
-
+*   📫 Contact: [LinkedIn](https://www.linkedin.com) · [GitHub](https://github.com)
