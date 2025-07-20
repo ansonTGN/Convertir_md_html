@@ -1,0 +1,12 @@
+{
+  "title": "Ejemplo para test",
+  "include_toc": true,
+  "theme": "light",
+  "toc_position": "left",
+  "header": true,
+  "custom_css": "/* Estilo con contraste alto y estética profesional */\n\nbody {\n  scroll-behavior: smooth;\n  background-color: #ffffff;\n  color: #111111;\n  font-family: 'Segoe UI', Roboto, sans-serif;\n  line-height: 1.6;\n  font-size: 16px;\n}\n\nmain {\n  max-width: 900px;\n  margin: 0 auto;\n}\n\nh1, h2, h3, h4, h5 {\n  color: #1e3a8a;\n  margin-top: 2rem;\n  margin-bottom: 1rem;\n  font-weight: 700;\n  line-height: 1.25;\n}\n\nnav ul {\n  list-style: none;\n  padding-left: 0;\n}\n\nnav li {\n  margin: 0.6em 0;\n  font-size: 0.96em;\n}\n\nnav a {\n  text-decoration: none;\n  padding: 0.25em 0.5em;\n  border-radius: 5px;\n  color: #1d4ed8;\n  display: block;\n  transition: all 0.2s ease-in-out;\n}\n\nnav a:hover {\n  background-color: #dbeafe;\n  color: #1e3a8a;\n  font-weight: 600;\n}\n\nmain code, pre {\n  background-color: #f3f4f6;\n  color: #111827;\n  padding: 1rem;\n  border-radius: 8px;\n  font-family: 'Fira Code', monospace;\n  font-size: 0.95em;\n  overflow-x: auto;\n  box-shadow: inset 0 0 0 1px #e5e7eb, 0 2px 6px rgba(0, 0, 0, 0.06);\n  margin-bottom: 1.5rem;\n  line-height: 1.5;\n}\n\npre code {\n  background: none;\n  padding: 0;\n  border: none;\n  box-shadow: none;\n}\n\na {\n  color: #2563eb;\n  text-decoration: underline;\n}\n\na:hover {\n  color: #1e40af;\n  background-color: #f0f9ff;\n}\n\nsection {\n  padding-bottom: 5rem;\n}",
+  "lang": "es",
+  "meta_description": "Visualización con alto contraste, profesional y hermosa"
+}
+
+
