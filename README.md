@@ -4,7 +4,6 @@
 
 ---
 
-````markdown
 # 🦀 rust_html_gen · Convertidor de Markdown a HTML profesional desde Python
 
 `rust_html_gen` es una biblioteca escrita en **Rust** con bindings para **Python** usando [PyO3](https://pyo3.rs/), que permite transformar archivos Markdown (`.md`) en documentos HTML profesionales, visualmente atractivos y con soporte de configuración avanzada (temas, estilos personalizados, índice, etc.).
