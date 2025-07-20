@@ -118,7 +118,7 @@ rust_html_gen/
 
 Desarrollado por **Ángel A. Urbina**
 
-*   📫 Contacto: [LinkedIn](https://www.linkedin.com) · [GitHub](https://github.com)
+*   📫 Contacto: [LinkedIn](https://www.linkedin.com) · [GitHub](https://github.com/ansonTGN)
 
 ---
 
